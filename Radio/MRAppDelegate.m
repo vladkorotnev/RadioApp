@@ -154,7 +154,7 @@ static NSString* curStationUrl;
         if(!url) {
             sender.state=1; return;
         }
-        if(![url hasPrefix:@"http://"] || ![url hasPrefix:@"https://"]) url=[@"http://" stringByAppendingString:url];
+        if(![url hasPrefix:@"http://"] && ![url hasPrefix:@"https://"]) url=[@"http://" stringByAppendingString:url];
         NSString*namne = [self input:@"Enter station name for this key" defaultValue:stUrl[@"name"]];
         if(!namne) {
             sender.state=1; return;
