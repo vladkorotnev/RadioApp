@@ -19,6 +19,7 @@
     NSImageView *darker;
     __weak NSSlider *volSlider;
 }
+- (IBAction)gainChg:(id)sender;
 - (void)mediaKeyEvent: (int)key state: (BOOL)state repeat: (BOOL)repeat;
 @property (strong) IBOutlet NSImageView*darker;
 - (IBAction)mbInvClick:(id)sender;
@@ -28,10 +29,16 @@
 @property (strong) IBOutlet NSButton *pwrBtn;
 - (IBAction)powerPress:(NSButton *)sender;
 @property (weak) IBOutlet NSSlider *volSlider;
+- (IBAction)upGain:(id)sender;
+@property (weak) IBOutlet NSButton *gainBtn;
+@property (weak) IBOutlet NSSlider *gainSlider;
 
 @property (strong) IBOutlet NSMenuItem *menubarInvert;
+@property (weak) IBOutlet NSButton *mutingBtn;
+- (IBAction)mutingChanged:(id)sender;
 
 @property (assign) IBOutlet OBMenuBarWindow *window;
 - (IBAction)bandClick:(NSButton*)sender;
+@property (weak) IBOutlet NSLevelIndicator *ampIndication;
 
 @end

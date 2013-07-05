@@ -50,6 +50,8 @@ static int curBand=100;
     }
 }
 
+
+
 - (void)mediaKeyEvent: (int)key state: (BOOL)state repeat: (BOOL)repeat
 {
 	switch( key )
@@ -145,6 +147,20 @@ static int curBand=100;
         curStName = [[[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%i",(curStation+curBand)]]objectForKey:@"name"];
         volSlider.floatValue = [[kioku objectForKey:@"volSlider"]floatValue];
         [self volChg:volSlider];
+        self.gainBtn.state = [[kioku objectForKey:@"shouldGain"]boolValue];
+        self.gainSlider.floatValue = [[kioku objectForKey:@"gain"]floatValue];
+        if(self.gainBtn.state == 0) {
+            [volSlider setEnabled:true];
+            [self.gainSlider setEnabled:false];
+            [self.ampIndication setMaxValue:1];
+            [self.ampIndication setFloatValue:self.volSlider.floatValue];
+        } else {
+            [volSlider setEnabled:false];
+            [self.gainSlider setEnabled:true];
+            [self.ampIndication setFloatValue:self.gainSlider.floatValue];
+            [self.ampIndication setMaxValue:6];
+        }
+
     }
     for (NSButton*b in mainVw.subviews) {
         if (b.tag >= 1 && b.tag <= 9) {
@@ -163,7 +179,7 @@ static int curBand=100;
 }
 
 - (void) applicationWillTerminate:(NSNotification *)notification {
-    NSDictionary* kioku = @{@"curStation": [NSString stringWithFormat:@"%i",curStation], @"volSlider": [NSString stringWithFormat:@"%f",volSlider.floatValue], @"curBand":[NSString stringWithFormat:@"%i",curBand]};
+    NSDictionary* kioku = @{@"curStation": [NSString stringWithFormat:@"%i",curStation], @"volSlider": [NSString stringWithFormat:@"%f",volSlider.floatValue], @"curBand":[NSString stringWithFormat:@"%i",curBand],@"shouldGain":[NSNumber numberWithBool:self.gainBtn.state], @"gain":[NSNumber numberWithFloat:self.gainSlider.floatValue]};
     [[NSUserDefaults standardUserDefaults]setObject:kioku forKey:@"kioku"];
 }
 
@@ -190,7 +206,7 @@ static int curBand=100;
             sender.state=1; return;
         }
         if(![url hasPrefix:@"http://"] && ![url hasPrefix:@"https://"]) url=[@"http://" stringByAppendingString:url];
-        NSString*namne = [self input:@"Enter station name for this key" defaultValue:stUrl[@"name"]];
+        NSString*namne = [self input:@"Change station name for this key?" defaultValue:stUrl[@"name"]];
         if(!namne) {
             sender.state=1; return;
         }
@@ -222,9 +238,10 @@ static int curBand=100;
   
         curStName=[stUrl objectForKey:@"name"];
     curStationUrl=[stUrl objectForKey:@"url"];
+    [display setStringValue:[stUrl objectForKey:@"name"]];
+    [display setTextColor:[NSColor grayColor]];
       if(pwrBtn.state==1) {
-        [display setStringValue:[stUrl objectForKey:@"name"]];
-        [display setTextColor:[NSColor grayColor]];
+       
         [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
     }
 }
@@ -247,9 +264,9 @@ static int curBand=100;
         [seeker stop];
         done1=true;
     }
-    if (movie.volume < (volSlider.doubleValue/100)) {
+    if (movie.volume < (self.gainBtn.state == 1 ? self.gainSlider.floatValue : volSlider.doubleValue)) {
         float futureVol = movie.volume + 0.1;
-        if (futureVol > 1.0f) {
+        if (futureVol > 1.0f && self.gainBtn.state == 0) {
             futureVol=1.0f;
         }
        NSLog(@"mVo %f",futureVol);
@@ -257,7 +274,7 @@ static int curBand=100;
 
     } else done2=true;
     if(!done1 || !done2) [self performSelector:@selector(_slowlyLowerVolumeStatics) withObject:nil afterDelay:0.2];
-
+    
 }
 - (void)_fadeToUntuned{
     bool done1 = false;
@@ -276,7 +293,7 @@ static int curBand=100;
         [seeker stop];
         done1=true;
     }
-    if (untuned.volume <= (volSlider.doubleValue/100)) {
+    if (untuned.volume <= (volSlider.doubleValue)) {
         if(!untuned.playing) [untuned play];
         float futureVol = untuned.volume + 0.1;
         if (futureVol > 1.0f) {
@@ -305,7 +322,7 @@ static int curBand=100;
     } else 
         done1=true;
     
-    if (seeker.volume < (volSlider.doubleValue/100)) {
+    if (seeker.volume < (volSlider.doubleValue)) {
         float futureVol = seeker.volume + 0.2;
         if (futureVol >= 1.0f) {
             futureVol=1.0f;
@@ -372,10 +389,11 @@ static int curBand=100;
 }
 - (IBAction)volChg:(NSSlider*)sender {
     if (movie) {
-        movie.volume=(sender.floatValue/100);
+        movie.volume=(sender.floatValue);
     }
-    seeker.volume=(sender.floatValue/100);
-    untuned.volume=(sender.floatValue/100);
+    [self.ampIndication setFloatValue:self.volSlider.floatValue];
+    seeker.volume=(sender.floatValue);
+    untuned.volume=(sender.floatValue);
     
 }
 
@@ -383,6 +401,7 @@ static int curBand=100;
     //Let’s get the load state
     QTMovieLoadState state = [[movie attributeForKey:QTMovieLoadStateAttribute] intValue];
 
+    if(self.pwrBtn.state == 0)return;
     //Checks if there was an error while buffering the streaming, in case there was, stops the audio playback
     if(state == -1l){
         [display setStringValue:@"Error"];
@@ -494,32 +513,67 @@ static int curBand=100;
         }
         NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)(curStation+curBand)]];
         
-       
-     
-        if(pwrBtn.state==1) {
-            if (!stUrl) {
-                curStName=@"";
-                curStationUrl=@"";
-                curStation=0;
-                [self _fadeToUntuned];
-                [movie stop];
-                [display setStringValue:@"Not tuned to a station"];
-                [display setTextColor:[NSColor grayColor]];
-                [self _pushButtonAtNumber:-1];
-            } else {
-                
-                curStName=[stUrl objectForKey:@"name"];
-                curStationUrl=[stUrl objectForKey:@"url"];
-                [display setStringValue:[stUrl objectForKey:@"name"]];
-                [display setTextColor:[NSColor grayColor]];
-                [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
-            }
+        if (!stUrl) {
+            curStName=@"";
+            curStationUrl=@"";
+            curStation=0;
+              if(pwrBtn.state==1) {
+            [self _fadeToUntuned];
+            [movie stop];
+              }
+            [display setStringValue:@"Not tuned to a station"];
+            [display setTextColor:[NSColor grayColor]];
+            [self _pushButtonAtNumber:-1];
+        } else {
             
+            curStName=[stUrl objectForKey:@"name"];
+            curStationUrl=[stUrl objectForKey:@"url"];
+            [display setStringValue:[stUrl objectForKey:@"name"]];
+            [display setTextColor:[NSColor grayColor]];
+              if(pwrBtn.state==1) {
+            [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
+              }
         }
+
+  
 
     } else return;
     
     
     
+}
+- (IBAction)gainChg:(id)sender {
+    [self.ampIndication setFloatValue:self.gainSlider.floatValue];
+    if(movie) movie.volume = self.gainSlider.floatValue;
+}
+- (IBAction)upGain:(id)sender {
+    [clickety play];
+    if(self.mutingBtn.state==1) return;
+    if(self.gainBtn.state == 0) {
+        [volSlider setEnabled:true];
+        [self.gainSlider setEnabled:false];
+        [self.ampIndication setMaxValue:1];
+        [self.ampIndication setFloatValue:self.volSlider.floatValue];
+        if(movie) movie.volume = volSlider.floatValue;
+    } else {
+        [volSlider setEnabled:false];
+        [self.gainSlider setEnabled:true];
+        [self.ampIndication setFloatValue:self.gainSlider.floatValue];
+        [self.ampIndication setMaxValue:6];
+        if(movie) movie.volume = self.gainSlider.floatValue;
+    }
+    
+}
+- (IBAction)mutingChanged:(id)sender {
+     [clickety play];
+    if(self.mutingBtn.state == 1) {
+        [volSlider setEnabled:false];
+        [self.gainSlider setEnabled:false];
+        [self.ampIndication setMaxValue:1];
+        [self.ampIndication setFloatValue:0];
+        if(movie) movie.volume = 0;
+    } else {
+        [self upGain:self.gainBtn];
+    }
 }
 @end
