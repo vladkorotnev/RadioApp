@@ -32,5 +32,6 @@
 @property (strong) IBOutlet NSMenuItem *menubarInvert;
 
 @property (assign) IBOutlet OBMenuBarWindow *window;
+- (IBAction)bandClick:(NSButton*)sender;
 
 @end

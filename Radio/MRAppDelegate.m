@@ -27,6 +27,7 @@ static AVAudioPlayer*untuned;
 static AVAudioPlayer*seeker;
 static AVAudioPlayer*clickety;
 static NSString* curStationUrl;
+static int curBand=100;
 
 - (NSString *)input: (NSString *)prompt defaultValue: (NSString *)defaultValue {
     NSAlert *alert = [NSAlert alertWithMessageText: prompt
@@ -114,6 +115,7 @@ static NSString* curStationUrl;
     self.window.hasMenuBarIcon = YES;
     self.window.attachedToMenuBar = YES;
     self.window.isDetachable = YES;
+   
     seeker=[[AVAudioPlayer alloc]initWithContentsOfURL:[[NSBundle mainBundle]URLForResource:@"seeking" withExtension:@"wav"] error:nil];
     seeker.volume=0;
     seeker.numberOfLoops=-1;
@@ -123,13 +125,46 @@ static NSString* curStationUrl;
     clickety.volume=1;
     untuned.numberOfLoops=-1;
     [display setTextColor:[NSColor lightGrayColor]];
+    NSDictionary* kioku = [[NSUserDefaults standardUserDefaults]objectForKey:@"kioku"];
+    if(kioku) {
+        curStation = [[kioku objectForKey:@"curStation"]intValue];
+        curBand = [[kioku objectForKey:@"curBand"]intValue];
+        NSLog(@"load kioku %@",kioku);
+        for (NSButton*b in mainVw.subviews) {
+            if (b.tag >= 100 && b.tag <= 300) {
+                if(b.tag == curBand){
+                    [b setState:1];
+                } else {
+                    [b setState:0];
+                }
+            }
+        }
+
+        [self _pushButtonAtNumber:curStation];
+        curStationUrl = [[[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%i",(curStation+curBand)]]objectForKey:@"url"];
+        curStName = [[[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%i",(curStation+curBand)]]objectForKey:@"name"];
+        volSlider.floatValue = [[kioku objectForKey:@"volSlider"]floatValue];
+        [self volChg:volSlider];
+    }
     for (NSButton*b in mainVw.subviews) {
         if (b.tag >= 1 && b.tag <= 9) {
-            NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)b.tag]];
+            NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)(b.tag+curBand)]];
             if(stUrl[@"name"] && ![stUrl[@"name"] isEqualToString:@""]) [b setToolTip:stUrl[@"name"]];
         }
     }
+    NSInteger kiokuVersion = [[NSUserDefaults standardUserDefaults]integerForKey:@"kiokuVersion"];
+    if(kiokuVersion < 2) {
+        for (int i=1; i<10; i++) {
+            [[NSUserDefaults standardUserDefaults]setObject:[[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%i",i]] forKey:[NSString stringWithFormat:@"%i",(100+i)]];
+        }
+        [[NSUserDefaults standardUserDefaults]setInteger:2 forKey:@"kiokuVersion"];
+    }
     
+}
+
+- (void) applicationWillTerminate:(NSNotification *)notification {
+    NSDictionary* kioku = @{@"curStation": [NSString stringWithFormat:@"%i",curStation], @"volSlider": [NSString stringWithFormat:@"%f",volSlider.floatValue], @"curBand":[NSString stringWithFormat:@"%i",curBand]};
+    [[NSUserDefaults standardUserDefaults]setObject:kioku forKey:@"kioku"];
 }
 
 - (void) _pushButtonAtNumber:(long)number {
@@ -147,7 +182,7 @@ static NSString* curStationUrl;
 }
 - (IBAction)buttonPushed:(NSButton*)sender {
     [clickety play];
-        NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)sender.tag]];
+        NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)(sender.tag+curBand)]];
     if(curStation == sender.tag){
         
         NSString*url = [self input:@"Change URL for this key?" defaultValue:stUrl[@"url"]];
@@ -162,7 +197,7 @@ static NSString* curStationUrl;
         [self _pushButtonAtNumber:sender.tag];
         if(url && namne) {
             stUrl = @{@"name": namne, @"url":url};
-            [[NSUserDefaults standardUserDefaults]setObject:stUrl forKey:[NSString stringWithFormat:@"%li",(long)sender.tag]];
+            [[NSUserDefaults standardUserDefaults]setObject:stUrl forKey:[NSString stringWithFormat:@"%li",(long)(sender.tag+curBand)]];
         } else return;
         
         return;
@@ -173,21 +208,25 @@ static NSString* curStationUrl;
         if(!url) {
             sender.state=0; return;
         }
-         if(![url hasPrefix:@"http://"] || ![url hasPrefix:@"https://"]) url=[@"http://" stringByAppendingString:url];
+         if(![url hasPrefix:@"http://"] && ![url hasPrefix:@"https://"]) url=[@"http://" stringByAppendingString:url];
           NSString*namne = [self input:@"Enter station name for this key" defaultValue:@""];
         if(!namne) {
             sender.state=0; return;
         }
         if(url && namne) {
             stUrl = @{@"name": namne, @"url":url};
-            [[NSUserDefaults standardUserDefaults]setObject:stUrl forKey:[NSString stringWithFormat:@"%li",(long)sender.tag]];
+            [[NSUserDefaults standardUserDefaults]setObject:stUrl forKey:[NSString stringWithFormat:@"%li",(long)(sender.tag+curBand)]];
         } else return;
     }
     [self _pushButtonAtNumber:sender.tag];
-    curStName=[stUrl objectForKey:@"name"];
-    [display setStringValue:[stUrl objectForKey:@"name"]];
-  [display setTextColor:[NSColor grayColor]];
-    [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
+  
+        curStName=[stUrl objectForKey:@"name"];
+    curStationUrl=[stUrl objectForKey:@"url"];
+      if(pwrBtn.state==1) {
+        [display setStringValue:[stUrl objectForKey:@"name"]];
+        [display setTextColor:[NSColor grayColor]];
+        [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
+    }
 }
 #define ARC4RANDOM_MAX 0x100000000
 - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
@@ -213,7 +252,7 @@ static NSString* curStationUrl;
         if (futureVol > 1.0f) {
             futureVol=1.0f;
         }
-       // NSLog(@"mV %f",futureVol);
+       NSLog(@"mVo %f",futureVol);
         movie.volume = futureVol;
 
     } else done2=true;
@@ -223,6 +262,7 @@ static NSString* curStationUrl;
 - (void)_fadeToUntuned{
     bool done1 = false;
     bool done2=false;
+    
     if (seeker.volume > 0) {
         float futureVol = seeker.volume - 0.05;
         if (futureVol < 0) {
@@ -260,7 +300,7 @@ static NSString* curStationUrl;
             futureVol=0;
             
         }
-    
+       NSLog(@"mVi %f",futureVol);
         movie.volume = futureVol;
     } else 
         done1=true;
@@ -272,7 +312,7 @@ static NSString* curStationUrl;
         
         }
         seeker.volume = futureVol;
-        
+     
     } else {
          [movie stop];
         [untuned stop];
@@ -390,7 +430,7 @@ static NSString* curStationUrl;
     
 }
 - (IBAction)powerPress:(NSButton *)sender {
-    
+/*
     for (NSButton*b in mainVw.subviews) {
         if (b.tag >= 1 && b.tag <= 9) {
             if(sender.state==1){
@@ -399,14 +439,13 @@ static NSString* curStationUrl;
                 [b setEnabled:false];
             }
         }
-    }
+    } */
     if(sender.state==1) {
         [self preheatTubes];
         if(curStation == 0)   [untuned play];
         else {
-            if(movie) {
                 [self _slowlyStaticOutToStation:curStationUrl];
-            }
+            NSLog(@"%@",curStName);
         }
     } else {
          [NSObject cancelPreviousPerformRequestsWithTarget:self];
@@ -423,5 +462,64 @@ static NSString* curStationUrl;
     [[NSUserDefaults standardUserDefaults]setBool:(![[NSUserDefaults standardUserDefaults]boolForKey:@"invert"]) forKey:@"invert"];
     self.window.menuBarIcon = [NSImage imageNamed:([[NSUserDefaults standardUserDefaults]boolForKey:@"invert"] ? @"menubar-i" : @"menubar")];
     self.window.highlightedMenuBarIcon = [NSImage imageNamed:([[NSUserDefaults standardUserDefaults]boolForKey:@"invert"] ? @"menubar" : @"menubar-i")];
+}
+
+- (NSButton*) findButtonWithTag:(NSInteger)tag {
+    for (NSButton*b in mainVw.subviews) {
+        if(b.tag == tag)return b;
+    }
+    return nil;
+}
+
+- (IBAction)bandClick:(NSButton*)sender {
+    int newBand;
+    for (NSButton*b in mainVw.subviews) {
+        if (b.tag >= 100 && b.tag <= 300) {
+            if(b.tag == sender.tag){
+                [b setState:1];
+                newBand=(int)b.tag;
+            } else {
+                [b setState:0];
+            }
+        }
+    }
+    if (newBand != curBand) {
+        [clickety play];
+        curBand = newBand;
+        for (NSButton*b in mainVw.subviews) {
+            if (b.tag >= 1 && b.tag <= 9) {
+                NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)(b.tag+curBand)]];
+                if(stUrl[@"name"] && ![stUrl[@"name"] isEqualToString:@""]) [b setToolTip:stUrl[@"name"]];
+            }
+        }
+        NSDictionary*stUrl = [[NSUserDefaults standardUserDefaults]objectForKey:[NSString stringWithFormat:@"%li",(long)(curStation+curBand)]];
+        
+       
+     
+        if(pwrBtn.state==1) {
+            if (!stUrl) {
+                curStName=@"";
+                curStationUrl=@"";
+                curStation=0;
+                [self _fadeToUntuned];
+                [movie stop];
+                [display setStringValue:@"Not tuned to a station"];
+                [display setTextColor:[NSColor grayColor]];
+                [self _pushButtonAtNumber:-1];
+            } else {
+                
+                curStName=[stUrl objectForKey:@"name"];
+                curStationUrl=[stUrl objectForKey:@"url"];
+                [display setStringValue:[stUrl objectForKey:@"name"]];
+                [display setTextColor:[NSColor grayColor]];
+                [self _slowlyStaticOutToStation:[stUrl objectForKey:@"url"]];
+            }
+            
+        }
+
+    } else return;
+    
+    
+    
 }
 @end
